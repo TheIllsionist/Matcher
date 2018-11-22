@@ -15,7 +15,7 @@ public interface SchemaMatcher {
      * @param cls2
      * @return 双精度数表示相似度
      */
-    double simOfClass(OntClass cls1,OntClass cls2);
+    double simOfClass(OntClass cls1,OntClass cls2) throws Exception;
 
     /**
      * 计算两个数据类型属性之间的相似度
@@ -23,7 +23,7 @@ public interface SchemaMatcher {
      * @param pro2
      * @return 双精度数表示相似度
      */
-    double simOfDp(DatatypeProperty pro1,DatatypeProperty pro2);
+    double simOfDp(DatatypeProperty pro1,DatatypeProperty pro2) throws Exception;
 
     /**
      * 计算两个对象属性之间的相似度
@@ -31,6 +31,6 @@ public interface SchemaMatcher {
      * @param pro2
      * @return 双精度数表示相似度
      */
-    double simOfOp(ObjectProperty pro1, ObjectProperty pro2);
+    double simOfOp(ObjectProperty pro1, ObjectProperty pro2) throws Exception;
 
 }

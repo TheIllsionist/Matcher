@@ -13,6 +13,6 @@ public interface InstanceMatcher {
      * @param ins2
      * @return 双精度数表示相似度
      */
-    double simOfIns(Individual ins1,Individual ins2);
+    double simOfIns(Individual ins1,Individual ins2) throws Exception;
 
 }
