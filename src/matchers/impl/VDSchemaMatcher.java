@@ -166,7 +166,7 @@ public class VDSchemaMatcher implements SchemaMatcher {
                     sumVec2 += vec2[i] * vec2[i];
                 }
             }else{
-                fenzi += vec1[i] * vec2[i];
+                fenzi += vec1[i] * vec2[i];   //TODO: soft TF/IDF的不同是不是关键就在这里?
                 sumVec1 += vec1[i] * vec1[i];
                 sumVec2 += vec2[i] * vec2[i];
             }
