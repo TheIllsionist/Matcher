@@ -27,8 +27,8 @@ public class VDSchemaMatcher implements SchemaMatcher {
     private int dpN = 0;   //本体2中dp文档数
     private int opM = 0;   //本体1中op文档数
     private int opN = 0;   //本体2中op文档数
-    private Map<String,Map<String,Double>> o1TFMaps = null;  //缓存计算过的TF信息
-    private Map<String,Map<String,Double>> o2TFMaps = null;  //缓存计算过的TF信息
+    private Map<String,Map<String,Double>> o1TFMaps = null;  //本体1中各资源的虚拟文档的TF信息
+    private Map<String,Map<String,Double>> o2TFMaps = null;  //本体2中各资源的虚拟文档的TF信息
     private Map<String,Integer> clsBsVec = null;    //类匹配时的向量空间坐标基矢量(唯一单词,第几维)
     private Map<String,Integer> dpBsVec = null;    //DP匹配时的向量空间坐标基矢量(唯一单词,第几维)
     private Map<String,Integer> opBsVec = null;    //OP匹配时的向量空间坐标基矢量(唯一单词,第几维)
