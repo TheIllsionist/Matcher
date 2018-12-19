@@ -1,9 +1,7 @@
 package util;
 
+import Parser.OntParser;
 import org.apache.jena.ontology.*;
-import org.apache.jena.rdf.model.RDFNode;
-import org.apache.jena.util.iterator.ExtendedIterator;
-import org.apache.jena.vocabulary.RDFS;
 import tokenizer.Tokenizer;
 import java.util.*;
 
@@ -14,9 +12,11 @@ import java.util.*;
 public class VDTFUtil {
 
     private Tokenizer tokenizer = null;  //分词去停用词工具
+    private OntParser parser = null;  //本体解析工具
 
-    public VDTFUtil(Tokenizer tokenizer){
+    public VDTFUtil(Tokenizer tokenizer,OntParser parser){
         this.tokenizer = tokenizer;
+        this.parser = parser;
     }
 
     /**
@@ -27,8 +27,12 @@ public class VDTFUtil {
         this.tokenizer = tokenizer;
     }
 
-    public Tokenizer getTokenizer(){
-        return tokenizer;
+    /**
+     * 可以通过调用setter方法来替换本体解析工具
+     * @param parser
+     */
+    public void setParser(OntParser parser){
+        this.parser = parser;
     }
 
     /**
@@ -55,17 +59,16 @@ public class VDTFUtil {
                 for(Map.Entry<String,Double> entry : neiborConf.entrySet()){
                     switch (entry.getKey()){
                         case "supClass":{    //类的父类作为邻居信息
-                            Iterator<OntClass> supClses = cls.listSuperClasses();
-                            while(supClses.hasNext()){
-                                OntClass tSup = supClses.next();
+                            List<OntClass> supClses = parser.supClassesOf(cls);  //所有直接父类
+                            for(OntClass tSup : supClses){
                                 if(tSup.isAnon() || !tSup.isClass())
                                     continue;
                                 Map<String,Double> neiMap = localTFMapOf(tSup,localConf);
                                 mergeLocMapWithNeiMap(localTFMap,neiMap,entry.getValue());
                             }
                         }break;
-                        case "domainOf":{  //类所"拥有"的属性作为邻居信息
-                            List<OntProperty> props = propsOfCls(model,cls);
+                        case "hasProperty":{  //类所"拥有"的属性作为邻居信息
+                            List<OntProperty> props = parser.propsOfCls(model,cls);
                             for (OntProperty prop : props) {
                                 if(prop.isAnon() || (!prop.isDatatypeProperty() && !prop.isObjectProperty())){
                                     continue;
@@ -83,9 +86,8 @@ public class VDTFUtil {
                 for(Map.Entry<String,Double> entry : neiborConf.entrySet()){
                     switch (entry.getKey()){
                         case "supProp":{   //属性的父属性作为邻居信息
-                            ExtendedIterator< ? extends OntProperty> supProps = ontProp.listSuperProperties(true);
-                            while(supProps.hasNext()){
-                                OntProperty prop = supProps.next();
+                            List<OntProperty> supProps = parser.supPropsOf(ontProp);
+                            for(OntProperty prop : supProps){
                                 if(prop.isAnon() || (!prop.isDatatypeProperty() && !prop.isObjectProperty())){
                                     continue;
                                 }
@@ -94,9 +96,8 @@ public class VDTFUtil {
                             }
                         }break;
                         case "domains":{  //属性的domain作为邻居信息
-                            ExtendedIterator<? extends OntResource> domains = ontProp.listDomain();
-                            while(domains.hasNext()){
-                                OntResource tDom = domains.next();
+                            List<OntClass> domains = parser.domainOf(model,ontProp);
+                            for(OntClass tDom : domains){
                                 if(tDom.isAnon() || !tDom.isClass()){
                                     continue;
                                 }
@@ -111,26 +112,6 @@ public class VDTFUtil {
         //经过以上步骤,本地信息和邻居信息都已被加入到localTFMap中
         normalization(localTFMap);  //计算词频
         return localTFMap;
-    }
-
-    /**
-     * 返回某个类所"拥有"的属性,这里指的是将定义域指定为该类的属性
-     * @param model
-     * @param cls
-     * @return
-     */
-    private List<OntProperty> propsOfCls(OntModel model,OntClass cls){
-        List<OntProperty> res = new ArrayList<>();
-        Iterator<OntProperty> props = model.listOntProperties();  //迭代模型中的所有属性,寻找将OntClass作为domain的属性
-        while(props.hasNext()){
-            OntProperty tProp = props.next();
-            if(tProp.hasProperty(RDFS.domain,cls)){
-                res.add(tProp);
-            }else{
-                continue;
-            }
-        }
-        return res;
     }
 
 
@@ -178,17 +159,15 @@ public class VDTFUtil {
         for (Map.Entry<String,Double> entry : localConf.entrySet()) {
             switch(entry.getKey()){
                 case "label":{
-                    Iterator<RDFNode> labels = resource.listLabels(null);  //列出该实体的所有可读名称
-                    while(labels.hasNext()){
-                        String label = labels.next().toString();
+                    List<String> labels = parser.labelsOf(resource);  //列出该实体的所有可读名称
+                    for(String label : labels){
                         List<String> tokens = tokenizer.tokensOfStr(label);  //tokens是允许有重复的
                         addTokensToMap(tokens,tfMap,entry.getValue());
                     }
                 }break;
                 case "comment":{
-                    Iterator<RDFNode> comments = resource.listComments(null);  //列出该实体的所有释义描述
-                    while(comments.hasNext()){
-                        String comment = comments.next().toString();
+                    List<String> comments = parser.commentsOf(resource);  //列出该实体的所有释义描述
+                    for(String comment : comments){
                         List<String> tokens = tokenizer.tokensOfStr(comment);  //tokens是允许有重复的
                         addTokensToMap(tokens,tfMap,entry.getValue());
                     }
@@ -197,7 +176,6 @@ public class VDTFUtil {
         }
         return tfMap;
     }
-
 
     /**
      * 细节操作,将一系列tokens按照指定权重weight加入一个tokenMap中
