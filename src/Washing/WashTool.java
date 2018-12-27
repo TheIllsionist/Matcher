@@ -1,6 +1,5 @@
 package Washing;
 
-import Parser.OntParser;
 import org.apache.jena.ontology.*;
 import org.apache.jena.rdf.model.Property;
 import org.apache.jena.rdf.model.RDFNode;
@@ -9,20 +8,22 @@ import org.apache.jena.rdf.model.StmtIterator;
 import org.apache.jena.vocabulary.OWL;
 import org.apache.jena.vocabulary.RDF;
 import org.apache.jena.vocabulary.RDFS;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+
+import java.io.PrintWriter;
+import java.util.*;
 
 public class WashTool {
 
-    private OntParser ontParser = null;
+//    private OntParser ontParser = null;
     private Map<String[],String> nfToMf = null;//属性名特征与提取特征对,当遇到一个属性与属性名特征中的一个匹配时,便按提取特征处理
     private Map<String,String> nsMap = null;
+    private PrintWriter misMatchWriter = null;
+    private PrintWriter matchWriter = null;
 
     private void initNfToMf(){
         nfToMf = new HashMap<>();
         nfToMf.put(new String[]{"时间","年限","日期"},
-                "\\d{4}年(\\d{1,2}月)?(\\d{1,2}日)?(\\d{1,2}(点|时))?(\\d{1,2}分)?(\\d{1,2}秒)?");
+                "\\d{4}年(\\d{1,2}月)?(\\d{1,2}日)?(\\d{1,2}(点|时))?(\\d{1,2}分)?(\\d{1,2}秒)?(（.+）)?");
         nfToMf.put(new String[]{"速","速度"},"\\d+(，|,)?\\d*\\.?\\d*(公里/小时|千米/小时|发/分|米/秒|千米/时|千米每小时|节)$");
         nfToMf.put(new String[]{"径","翼展","航程","射程","宽","宽度","长度","长","高度","深度","行程","高"},"\\d+(，|,)?\\d*\\.?\\d*(毫米|厘米|分米|米|千米|公里|海里)$");
         nfToMf.put(new String[]{"重","排水量","重量"},"\\d+(，|,)?\\d*\\.?\\d*(克|千克|吨)$");
@@ -48,8 +49,10 @@ public class WashTool {
         nsMap.put("wgbq","http://kse.seu.edu.cn/wgbq#");
         nsMap.put("xgbg","http://kse.seu.edu.cn/xgbg#");
     }
-    public WashTool(OntParser ontParser){  //TODO:属性的清洗配置可以写入配置文件(利用JackSon解析)
-        this.ontParser = ontParser;
+
+    public WashTool(PrintWriter misMatchWriter,PrintWriter matchWriter){  //TODO:属性的清洗配置可以写入配置文件(利用JackSon解析)
+        this.misMatchWriter = misMatchWriter;
+        this.matchWriter = matchWriter;
         initNsMap();    //初始化命名空间与前缀的对应关系
         initNfToMf();   //初始化数据类型属性清洗配置
     }
@@ -59,6 +62,7 @@ public class WashTool {
      * @param ins
      */
     public void washingDpVals(Individual ins){
+        Map<Property,String> cache = new HashMap<>();  //记录需要删掉原值的属性和它的新值
         StmtIterator iterator = ins.listProperties();
         Statement st = null;
         while(iterator.hasNext()){
@@ -66,10 +70,11 @@ public class WashTool {
             Property prop = st.getPredicate();
             String originalVal = null;
             if(prop.hasProperty(RDF.type, OWL.DatatypeProperty)){  //当前属性是数据类型属性
-                String val = st.getObject().asLiteral().toString().trim(); //得到属性的属性值
+                String val = st.getObject().asLiteral().toString().trim(); //得到属性的属性值(去除所有空格)
                 originalVal = val;    //保留属性取值的原值
+                val = val.replaceAll(" ","");  //**去掉所有空格**
                 if(val.matches("\\d+(，|,)?\\d*\\.?\\d*")){  //属性值为纯数字
-                    val = val.replaceAll(",|，","");  //去掉纯数字里面的逗号
+                    val = val.replaceAll(",|，","");  //**去掉纯数字里面的逗号**
                 }else{  //属性值带单位,则根据属性名判断可能带有哪些单位
                     String patternStr = findWashingConf(prop.getProperty(RDFS.label).getObject().asLiteral().toString().trim()); //获取清洗模式
                     if(patternStr == null) {  //目前不清晰该属性的属性值,因为没有合适的清洗模式
@@ -78,16 +83,21 @@ public class WashTool {
                         if(val.matches(patternStr)){  //匹配清洗模式,可以清洗
                             val = val.replaceAll(",|，",""); //去掉逗号
                             val = val.replace("公里","千米").replace("小时","时");
-                            val = val.replace("千米每小时","千米/时");
+                            val = val.replace("千米每时","千米/时");
                         }else{  //不匹配清洗模式的数据(三元组)
-                            System.out.println("WashingMissMatched : " + getPreOf(ins.getURI()) + "," + getPreOf(prop.getURI()) + "," + val);
+                            misMatchWriter.println("WashingMissMatched : " + getPreOf(ins.getURI()) + ", " + getPreOf(prop.getURI()) + ", " + val);
                         }
                     }
                 }
                 if(!val.equals(originalVal)){  //输出清洗出变化的数据(四元组)
-                    System.out.println("WashingMatched     : " + getPreOf(ins.getURI()) + "," + getPreOf(prop.getURI()) + "," + "ori:" + originalVal + "," + "now:" + val);
+                    cache.put(prop,val);
+                    matchWriter.println("WashingMatched     : " + getPreOf(ins.getURI()) + ", " + getPreOf(prop.getURI()) + ", " + "ori:" + originalVal + ", " + "now:" + val);
                 }
             }
+        }
+        for(Map.Entry<Property,String> entry : cache.entrySet()){
+            deleteDpVal(ins,entry.getKey());    //先删掉原值
+            ins.addProperty(entry.getKey(),entry.getValue());  //添加新值
         }
     }
 
@@ -158,12 +168,7 @@ public class WashTool {
      */
     private void replaceVal(OntModel ontModel,Individual ins1,DatatypeProperty dp,ObjectProperty op,Individual ins2,OntClass cls){
         if(dp != null){ //1.如果此数据类型属性存在,移除这个实例的这个数据类型属性
-            StmtIterator iterator = ins1.listProperties(dp);  //列出这个属性的所有triple
-            while(iterator.hasNext()){
-                Statement statement = iterator.nextStatement();
-                RDFNode tmp = statement.getObject();
-                ins1.removeProperty(dp,tmp);  //删除实例1这个属性的值
-            }
+            deleteDpVal(ins1,dp);
         }
         //2.在实例1和实例2之间加入对象属性关系(现在还不确定是否需要中间节点)
 //        ins1.addProperty(op,ins2);  //不加中间节点的方式
@@ -175,6 +180,23 @@ public class WashTool {
         ObjectProperty insIs = ontModel.getObjectProperty(nsMap.get("meta") + "实例");
         bkIns.addProperty(insIs,ins2);
         //TODO:如果所有的实例都已经修改好了,移除这个数据类型属性(在本方法中不做这件事情)
+    }
+
+    /**
+     * 删掉某个实例的某个数据类型属性的值
+     * @param ins
+     * @param dp
+     */
+    private void deleteDpVal(Individual ins,Property dp){
+        List<RDFNode> nodes = new ArrayList<>();
+        StmtIterator iterator = ins.listProperties(dp);
+        while(iterator.hasNext()){
+            Statement statement = iterator.nextStatement();
+            nodes.add(statement.getObject());
+        }
+        for(RDFNode node : nodes){
+            ins.removeProperty(dp,node);
+        }
     }
 
     /**
@@ -192,7 +214,7 @@ public class WashTool {
      * @return
      */
     private String getPreOf(String uri){
-        int d = uri.indexOf("#" + 1);
+        int d = uri.indexOf("#") + 1;
         String str1 = uri.substring(0,d);
         String str2 = uri.substring(d);
         return nsMap.get(str1) + str2;
