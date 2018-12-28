@@ -1,14 +1,11 @@
 package Washing;
 
 import org.apache.jena.ontology.*;
-import org.apache.jena.rdf.model.Property;
-import org.apache.jena.rdf.model.RDFNode;
-import org.apache.jena.rdf.model.Statement;
-import org.apache.jena.rdf.model.StmtIterator;
+import org.apache.jena.rdf.model.*;
 import org.apache.jena.vocabulary.OWL;
+import org.apache.jena.vocabulary.OWL2;
 import org.apache.jena.vocabulary.RDF;
 import org.apache.jena.vocabulary.RDFS;
-
 import java.io.PrintWriter;
 import java.util.*;
 
@@ -19,6 +16,54 @@ public class WashTool {
     private Map<String,String> nsMap = null;
     private PrintWriter misMatchWriter = null;
     private PrintWriter matchWriter = null;
+
+    private ArrayList<String> ins1Missing = new ArrayList<>();
+    private ArrayList<String> ins2Missing = new ArrayList<>();
+    private ArrayList<String> dpMissing = new ArrayList();
+    private ArrayList<String> opMissing = new ArrayList();
+    private ArrayList<String> clsMissing = new ArrayList<>();
+
+    private ArrayList<String> insCreating = new ArrayList<>();
+
+    public ArrayList<String> getIns1Missing() {
+        return ins1Missing;
+    }
+
+    public ArrayList<String> getIns2Missing() {
+        return ins2Missing;
+    }
+
+    public ArrayList<String> getDpMissing() {
+        return dpMissing;
+    }
+
+    public ArrayList<String> getOpMissing() {
+        return opMissing;
+    }
+
+    public ArrayList<String> getClsMissing() {
+        return clsMissing;
+    }
+
+    public ArrayList<String> getInsCreating() {
+        return insCreating;
+    }
+
+    public ArrayList<String> getDpCreating() {
+        return dpCreating;
+    }
+
+    public ArrayList<String> getOpCreating() {
+        return opCreating;
+    }
+
+    public ArrayList<String> getClsCreating() {
+        return clsCreating;
+    }
+
+    private ArrayList<String> dpCreating = new ArrayList<>();
+    private ArrayList<String> opCreating = new ArrayList<>();
+    private ArrayList<String> clsCreating = new ArrayList<>();
 
     private void initNfToMf(){
         nfToMf = new HashMap<>();
@@ -146,17 +191,16 @@ public class WashTool {
         //尝试得到实例2
         Individual ins2 = ontModel.getIndividual(ins2Uri);
         if(ins2 == null){  //知识库中不存在实例2
-            ins2 = ontModel.createIndividual(ontModel.createOntResource(ins2Uri));  //创建实例2
+            ins2 = createAndLabelIns(ontModel,ins2Pre);  //创建实例2
             ins2.addProperty(RDF.type,cls);  //声明实例2的类(Jena API自动去除重复声明)
         }
         DatatypeProperty dp = ontModel.getDatatypeProperty(dpUri); //得到数据类型属性(可能为空)
         ObjectProperty op = ontModel.getObjectProperty(opUri);  //得到对象属性(可能为空)
         if(op == null){  //对象属性不存在
-            op = ontModel.createObjectProperty(opUri);  //创建对象属性
+            op = createAndLabelOp(ontModel,opPre);  //创建对象属性
         }
         replaceVal(ontModel,ins1,dp,op,ins2,cls);  //实例1,实例2,实例2对应的类,对象属性都已存在
     }
-
     /**
      * 将实例1的一个数据类型属性的值替换为实例2
      * @param ontModel
@@ -167,7 +211,7 @@ public class WashTool {
      * @param cls
      */
     private void replaceVal(OntModel ontModel,Individual ins1,DatatypeProperty dp,ObjectProperty op,Individual ins2,OntClass cls){
-        if(dp != null){ //1.如果此数据类型属性存在,移除这个实例的这个数据类型属性
+        if(dp != null){ //1.如果此数据类型属性存在,移除这个实例的这个数据类型属性的所有值
             deleteDpVal(ins1,dp);
         }
         //2.在实例1和实例2之间加入对象属性关系(现在还不确定是否需要中间节点)
@@ -181,6 +225,141 @@ public class WashTool {
         bkIns.addProperty(insIs,ins2);
         //TODO:如果所有的实例都已经修改好了,移除这个数据类型属性(在本方法中不做这件事情)
     }
+
+
+    /**
+     * 根据preLabel创建一个实例并且给该实例打上label
+     * @param ontModel
+     * @param insPre
+     * @return
+     */
+    private Individual createAndLabelIns(OntModel ontModel,String insPre){
+        Individual individual = null;
+        insCreating.add("Creating Ins     :" + getUriOf(insPre));
+        individual = ontModel.createIndividual(ontModel.createOntResource(getUriOf(insPre)));  //创建实例
+        String name = insPre.substring(insPre.indexOf(":") + 1);
+        individual.addLabel(name,null);  //每个实例都必须有label,给这个实例加上一个label
+        return individual;
+    }
+    /**
+     * 根据preLabel创建一个DP并且给该DP打上一个label
+     * @param ontModel
+     * @param dpPre
+     * @return
+     */
+    private DatatypeProperty createAndLabelDp(OntModel ontModel,String dpPre){
+        DatatypeProperty dp = null;
+        dpCreating.add("Creating DP     :" + getUriOf(dpPre));
+        dp = ontModel.createDatatypeProperty(getUriOf(dpPre));
+        String name = dpPre.substring(dpPre.indexOf(":") + 1);
+        dp.addLabel(name,null);
+        return dp;
+    }
+    /**
+     * 根据preLabel创建一个OP并且给该OP打上一个label
+     * @param ontModel
+     * @param opPre
+     * @return
+     */
+    private ObjectProperty createAndLabelOp(OntModel ontModel,String opPre){
+        ObjectProperty op = null;
+        opCreating.add("Creating OP     :" + getUriOf(opPre));
+        op = ontModel.createObjectProperty(getUriOf(opPre));
+        String name = opPre.substring(opPre.indexOf(":") + 1);
+        op.addLabel(name,null);
+        return op;
+    }
+    /**
+     * 根据preLabel创建一个类并且给该类打上一个label
+     * @param ontModel
+     * @param clsPre
+     * @return
+     */
+    private OntClass createAndLabelCls(OntModel ontModel,String clsPre){
+        OntClass cls = null;
+        clsCreating.add("Creating CLASS     :" + getUriOf(clsPre));
+        cls = ontModel.createClass(getUriOf(clsPre));
+        String name = clsPre.substring(clsPre.indexOf(":") + 1);
+        cls.addLabel(name,null);
+        return cls;
+    }
+
+    /**
+     * 给某个实例加入一个数据类型属性值
+     * @param ontModel
+     * @param insPre
+     * @param dpPre
+     * @param val
+     */
+    public void addDpVal(OntModel ontModel,String insPre,String dpPre,String val){
+        String insUri = getUriOf(insPre);
+        String dpUri = getUriOf(dpPre);
+        //尝试得到实例1
+        Individual ins1 = ontModel.getIndividual(insUri);
+        if(ins1 == null) {  //实例1不存在,报错返回
+            ins1Missing.add("MissingIns1        : 实例 " + insUri + " 不存在");
+            return;
+        }
+        DatatypeProperty dp = ontModel.getDatatypeProperty(dpUri); //得到数据类型属性(可能为空)
+        if(dp == null){
+            dpMissing.add("Missing DP         :数据类型属性" + dpUri + "不存在");
+            dp = createAndLabelDp(ontModel,dpPre);
+        }
+        ins1.addProperty(dp,val);
+    }
+
+    /**
+     * 在两个实例之间加入对象属性关系
+     * @param ontModel
+     * @param ins1Pre
+     * @param opPre
+     * @param ins2Pre
+     * @param clsPre
+     */
+    public void addOpVal(OntModel ontModel,String ins1Pre,String opPre,String ins2Pre,String clsPre){
+        String ins1Uri = getUriOf(ins1Pre);
+        String ins2Uri = getUriOf(ins2Pre);
+        String opUri = getUriOf(opPre);
+        String clsUri = getUriOf(clsPre);
+        //尝试得到实例1
+        Individual ins1 = ontModel.getIndividual(ins1Uri);
+        if(ins1 == null) {  //实例1不存在,报错返回
+            ins1Missing.add("MissingIns1        : 实例 " + ins1Uri + " 不存在");
+            return;
+        }
+        //得到实例2对应的类(这个类一定存在)
+        OntClass cls = ontModel.getOntClass(clsUri);
+        if(cls == null){
+            clsMissing.add("MissingCls     : 类 " + clsUri + "不存在");
+            cls = createAndLabelCls(ontModel,clsPre);
+        }
+        //尝试得到实例2
+        Individual ins2 = ontModel.getIndividual(ins2Uri);
+        if(ins2 == null){  //知识库中不存在实例2
+            ins2Missing.add("MissingIns2        : 实例 " + ins2Uri + " 不存在");
+            ins2 = createAndLabelIns(ontModel,ins2Pre);  //创建实例2
+            ins2.addOntClass(cls); //声明实例2的类(Jena API自动去除重复声明)
+        }
+        ObjectProperty op = ontModel.getObjectProperty(opUri);  //得到对象属性(可能为空)
+        if(op == null){  //对象属性不存在
+            opMissing.add("Missing OP      :对象属性" + opUri + "不存在");
+            op = createAndLabelOp(ontModel,opPre);  //创建对象属性
+        }
+//        ins1.addProperty(op,ins2);  //不加中间节点的方式
+        //加入中间节点的方式
+        OntClass bkCls = ontModel.getOntClass(getUriOf("meta:blankNode"));
+        String bkInsUri = nsMap.get("wgbq") + UUID.randomUUID().toString().replace("-","");
+//        Individual bkIns = ontModel.createIndividual(ontModel.createOntResource(bkInsUri));
+//        bkIns.addProperty(RDF.type,bkCls);  //空节点是blankNode类的实例
+//        ins1.addProperty(op,bkIns);
+//        ObjectProperty op_insIs = ontModel.getObjectProperty(nsMap.get("meta") + "实例");
+//        bkIns.addProperty(op_insIs,ins2);
+        Resource bkIns = ontModel.createResource(bkInsUri).addProperty(RDF.type, OWL2.NamedIndividual).addProperty(RDF.type,bkCls);
+        ins1.addProperty(op,bkIns);
+        ObjectProperty op_insIs = ontModel.getObjectProperty(nsMap.get("meta") + "实例");
+        bkIns.addProperty(op_insIs,ins2);
+    }
+
 
     /**
      * 删掉某个实例的某个数据类型属性的值
@@ -208,6 +387,7 @@ public class WashTool {
         String[] tmp = pre.split(":");
         return nsMap.get(tmp[0]) + tmp[1];
     }
+
     /**
      * 根据uri返回preLabel
      * @param uri
@@ -217,7 +397,7 @@ public class WashTool {
         int d = uri.indexOf("#") + 1;
         String str1 = uri.substring(0,d);
         String str2 = uri.substring(d);
-        return nsMap.get(str1) + str2;
+        return nsMap.get(str1) + ":" + str2;
     }
 
 }
